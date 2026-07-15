@@ -4,6 +4,7 @@ import bpy_extras
 import gpu
 import gpu_extras.batch
 import copy
+import mathutils
 
 # ブレンダーに登録するアドオン情報
 bl_info = {
@@ -51,7 +52,7 @@ def unregister():
     # Blenderからクラスを削除
     for cls in classes:
         bpy.utils.unregister_class(cls)
-    print("レべルエディタが無効化されました。")
+        print("レべルエディタが無効化されました。")
     
 #トップバーの拡張メニュー
 class TOPBAR_MT_my_menu(bpy.types.Menu):
@@ -174,8 +175,19 @@ class MYADDON_OT_export_scene(bpy.types.Operator, bpy_extras.io_utils.ExportHelp
         #カスタムプロパティ'file_name'
         if "file_name" in object:
             self.write_and_print(file, indent + "N %s" % object['file_name'])
+        #カスタムプロパティ'collision'
+        if"collider"in object:
+            self.write_and_print(file, indent + "C %s" % object["collider"])
+            temp_str %= (object["collider_center"][0],object["collider_center"][1],object["collider_center"][2])
+            self.write_and_print(file, temp_str)
+            temp_str = indent + "CS %f %f %f"
+            temp_str %= (object["collider_size"][0],object["collider_size"][1],object["collider_size"][2])
+            self.write_and_print(file,temp_str)
         self.write_and_print(file, indent + "END")
         self.write_and_print(file, '')
+
+
+
 
         # 子ノードへ進む（深さが1上がる）
         for child in object.children:
@@ -206,6 +218,8 @@ class OBJECT_PT_file_name(bpy.types.Panel):
     # サブメニューの描画
     def draw(self, context):
         
+
+        
         #パネルに項目を追加
         if "file_name" in context.object:
             #すでにプロパティがあれば、プロパティを表示
@@ -213,6 +227,7 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         else:
             #プロパティがなければ、プロパティ追加ボタンを表示
             self.layout.operator(MYADDON_OT_add_filename.bl_idname)
+            #self.layout.operator(MYADDON_OT_add_collider.bl_idname)
                 
 
 class MYADDON_OT_add_filename(bpy.types.Operator):
@@ -236,6 +251,9 @@ class DrawCollider:
 
     #3Dビューに登録する描画関数
     def draw_collider():
+        
+
+
         #頂点データ
         vertices = {"pos":[]}
         #インデックスデータ
@@ -258,36 +276,54 @@ class DrawCollider:
 
         #現在シーンのオブジェクトリストを走査
         for object in bpy.context.scene.objects:
-            #追加前の頂点数
-            start = len(vertices["pos"])
+             #コライダープロパティがなければ描画をスキップ
+             if not"collider" in object:
+                 continue
+             #中心点、サイズの変数を宣言
+             center = mathutils.Vector((0,0,0))
+             size = mathutils.Vector((2,2,2))
+
+
+             #プロパティから値を取得
+             center[0]=object["collider_center"][0]
+             center[1]=object["collider_center"][1]
+             center[2]=object["collider_center"][2]
+             size[0]=object["collider_size"][0]
+             size[1]=object["collider_size"][1]
+             size[2]=object["collider_size"][2]     
+
+        #追加前の頂点数
+        start = len(vertices["pos"])
 
             #Boxの8頂点分回す
-            for offset in offsets:
-                #オブジェクトの中心座標をコピー
+        for offset in center:
+            #オブジェクトの中心座標をコピー
 
-                pos = copy.copy(object.location)
-                #中心点を基準に各頂点ごとにずらす
-                pos[0]+= offset[0]*size[0]
-                pos[1]+= offset[1]*size[1]
-                pos[2]+= offset[2]*size[2]
-                #頂点データリストに座標を追加
-                vertices["pos"].append(pos)
+            pos = copy.copy(object.location)
+            #中心点を基準に各頂点ごとにずらす
+            pos[0]+= offset[0]*size[0]
+            pos[1]+= offset[1]*size[1]
+            pos[2]+= offset[2]*size[2]
+            #ローカル座標からワールド座標に変換
+            pos = object.matrix_world @ pos
+            #頂点データリストに座標を追加
+            vertices["pos"].append(pos)
 
-                #前面を構成する辺の頂点インデックス
-                indices.append([start+0,start+1])
-                indices.append([start+2,start+3])
-                indices.append([start+0,start+2])
-                indices.append([start+1,start+3])
-                #裏面を構成する辺の頂点インデックス
-                indices.append([start+4,start+5])
-                indices.append([start+6,start+7])
-                indices.append([start+4,start+6])
-                indices.append([start+5,start+7])
-                #手前と奥を繋ぐ辺の頂点インデックス
-                indices.append([start+0,start+4])
-                indices.append([start+1,start+5])
-                indices.append([start+2,start+6])
-                indices.append([start+3,start+7])
+            #前面を構成する辺の頂点インデックス
+            indices.append([start+0,start+1])
+            indices.append([start+2,start+3])
+            indices.append([start+0,start+2])
+            indices.append([start+1,start+3])
+            #裏面を構成する辺の頂点インデックス
+            indices.append([start+4,start+5])
+            indices.append([start+6,start+7])
+            indices.append([start+4,start+6])
+            indices.append([start+5,start+7])
+             #手前と奥を繋ぐ辺の頂点インデックス
+            indices.append([start+0,start+4])
+            indices.append([start+1,start+5])
+            indices.append([start+2,start+6])
+            indices.append([start+3,start+7])
 
         #ビルド院のシェーダを取得
         shader = gpu.shader.from_builtin('UNIFORM_COLOR')
@@ -302,6 +338,43 @@ class DrawCollider:
         #描画
         batch.draw(shader)
 
+#オペレーターカスタムプロパティ['collider']追加
+class MYADDON_OT_add_collider(bpy.types.Operator):
+    bl_idname = "myaddon.myaddon_ot_add_collider"
+    bl_label = "コライダー　追加"
+    bl_description = "['collider']カスタムプロパティを追加します"
+    bl_options = {"REGISTER","UNDO"}
+
+    def execute(self,context):
+        #['collider']カスタムプロパティを追加
+        context.object["collider"] = "BOX"
+        context.object["collider_center"] = mathutils.Vector((0,0,0))
+        context.object["collider_size"] = mathutils.Vector((2,2,2))
+        return {"FINISHED"}
+
+#パネルコライダー
+class OBJECT_PT_collier(bpy.types.Panel):
+    bl_idname = "OBJECT_PT_collider"
+    bl_label = "Collider"
+    bl_space_type = "PROPERTIES"
+    bl_region_type = "WINDOW"
+    bl_context = "object"
+
+    #サブメニューの描画
+    def draw(self,context):
+
+        #パネルに項目を追加
+        if"collider"in context.object:
+            #既にプロパティがあれば、プロパティを表示
+            self.layout.prop(context.object,'["collider"]',text = "type")
+            self.layout.prop(context.object,'["collider_center"]',text = "Center")
+            self.layout.prop(context.object,'["collider_size"]',text = "Size")
+        else:
+            #プロパティがなければ、プロパティ追加ボタンを表示
+            self.layout.operator(MYADDON_OT_add_collider.bl_idname)
+
+
+
 # Blenderブレンダーに登録するクラスリスト
 classes = (
     MYADDON_OT_stretch_vertex,
@@ -310,6 +383,8 @@ classes = (
     MYADDON_OT_add_filename,
     TOPBAR_MT_my_menu,
     OBJECT_PT_file_name,
+    MYADDON_OT_add_collider,
+    OBJECT_PT_collier,
 )
 
 # テスト実行用コード
