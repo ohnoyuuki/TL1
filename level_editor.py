@@ -178,6 +178,7 @@ class MYADDON_OT_export_scene(bpy.types.Operator, bpy_extras.io_utils.ExportHelp
         #カスタムプロパティ'collision'
         if"collider"in object:
             self.write_and_print(file, indent + "C %s" % object["collider"])
+            temp_str = indent + "CC %f %f %f"
             temp_str %= (object["collider_center"][0],object["collider_center"][1],object["collider_center"][2])
             self.write_and_print(file, temp_str)
             temp_str = indent + "CS %f %f %f"
@@ -299,7 +300,7 @@ class DrawCollider:
         for offset in center:
             #オブジェクトの中心座標をコピー
 
-            pos = copy.copy(object.location)
+            pos = copy.copy(center)
             #中心点を基準に各頂点ごとにずらす
             pos[0]+= offset[0]*size[0]
             pos[1]+= offset[1]*size[1]
